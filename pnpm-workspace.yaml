@@ -1,4 +1,8 @@
 packages:
-  - apps
-  - apps/electron
-  - apps/renderer
+  - app
+  - app/electron
+  - app/renderer
+
+onlyBuiltDependencies:
+  - electron
+  - esbuild

@@ -1,15 +1,15 @@
 {
-  "name": "apps",
+  "name": "app",
   "version": "1.0.0",
   "description": "",
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:renderer\" \"pnpm dev:electron:wait\"",
-    "dev:renderer": "pnpm --filter renderer dev",
+    "dev:renderer": "pnpm --filter ./renderer dev",
     "dev:electron:wait": "wait-on http://127.0.0.1:5173 && pnpm dev:electron",
-    "dev:electron": "VITE_DEV_SERVER_URL=http://localhost:5173 pnpm --filter electron-shell dev",
-    "build": "pnpm --filter renderer build",
-    "start": "pnpm --filter electron-shell start",
-    "preview": "pnpm --filter renderer preview",
+    "dev:electron": "VITE_DEV_SERVER_URL=http://127.0.0.1:5173 pnpm --filter ./electron dev",
+    "build": "pnpm --filter ./renderer build",
+    "start": "pnpm --filter ./electron start",
+    "preview": "pnpm --filter ./renderer preview",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
