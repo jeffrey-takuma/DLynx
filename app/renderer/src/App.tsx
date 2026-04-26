@@ -29,9 +29,7 @@ export default function App() {
           </span>
         </div>
 
-        <pre className="payload-preview">
-          {JSON.stringify({ url }, null, 2)}
-        </pre>
+        <pre className="payload-preview">{JSON.stringify({ url }, null, 2)}</pre>
       </section>
     </main>
   );

@@ -1,5 +1,5 @@
 packages:
-  - app
+  - app/downloader
   - app/electron
   - app/renderer
 

@@ -3,17 +3,25 @@
   "private": true,
   "packageManager": "pnpm@10.16.0",
   "scripts": {
-    "dev": "pnpm --filter app dev",
+    "dev": "concurrently -k \"pnpm dev:renderer\" \"pnpm dev:electron:wait\"",
     "dev:renderer": "pnpm --filter ./app/renderer dev",
-    "dev:electron": "pnpm --filter ./app/electron dev",
-    "build": "pnpm --filter app build",
-    "lint": "pnpm lint:js && pnpm lint:py",
+    "dev:electron:wait": "wait-on http://127.0.0.1:5173 && pnpm dev:electron",
+    "dev:electron": "VITE_DEV_SERVER_URL=http://127.0.0.1:5173 pnpm --filter ./app/electron dev",
+    "build": "pnpm build:renderer && pnpm build:downloader && pnpm build:electron",
+    "build:renderer": "pnpm --filter ./app/renderer build",
+    "build:downloader": "pnpm --filter ./app/downloader build",
+    "install:tools": "pnpm --filter ./app/downloader install:tools",
+    "build:electron": "pnpm --filter ./app/electron build",
+    "start": "pnpm build && pnpm --filter ./app/electron start",
+    "preview": "pnpm --filter ./app/renderer preview",
+    "lint": "pnpm lint:js",
     "lint:js": "biome check .",
-    "lint:py": "app/downloader/.venv/bin/ruff check app/downloader",
     "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",
-    "husky": "^9.1.7"
+    "concurrently": "^9.2.1",
+    "husky": "^9.1.7",
+    "wait-on": "^9.0.4"
   }
 }
