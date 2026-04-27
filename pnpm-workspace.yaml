@@ -1,0 +1,8 @@
+packages:
+  - app/downloader
+  - app/electron
+  - app/renderer
+
+onlyBuiltDependencies:
+  - electron
+  - esbuild

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build --outDir ../../dist/renderer --emptyOutDir",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -13,6 +13,10 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "typescript": "^5.9.3",
     "vite": "^7.1.0"
   }
 }
