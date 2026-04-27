@@ -17,7 +17,7 @@
 # Markdown
 *.md text eol=lf
 
-# Windows系
+# Windows
 *.bat text eol=crlf
 *.cmd text eol=crlf
 

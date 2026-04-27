@@ -2,8 +2,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 
+import {
+  type DownloadRequest,
+  type StartedDownload,
+  startDownload,
+} from "../downloader/download.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const activeDownloads = new Map<number, StartedDownload>();
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -36,6 +44,34 @@ app.whenReady().then(() => {
     return { ok: true, source: "electron-main" };
   });
 
+  ipcMain.handle("download:start", async (_event, request: unknown) => {
+    const downloadRequest = parseDownloadRequest(request);
+    const started = await startDownload(downloadRequest, {
+      repoRoot: path.resolve(__dirname, "../.."),
+    });
+    const downloadId = Date.now();
+
+    activeDownloads.set(downloadId, started);
+
+    started.process.stdout.on("data", (chunk: Buffer) => {
+      console.log(`yt-dlp stdout: ${chunk.toString()}`);
+    });
+
+    started.process.stderr.on("data", (chunk: Buffer) => {
+      console.error(`yt-dlp stderr: ${chunk.toString()}`);
+    });
+
+    started.process.on("close", () => {
+      activeDownloads.delete(downloadId);
+    });
+
+    return {
+      id: downloadId,
+      pid: started.process.pid,
+      outputDir: started.outputDir,
+    };
+  });
+
   createWindow();
 
   app.on("activate", () => {
@@ -50,3 +86,17 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
+
+function parseDownloadRequest(value: unknown): DownloadRequest {
+  if (!value || typeof value !== "object") {
+    throw new Error("Download request must be an object.");
+  }
+
+  const { url } = value as { url?: unknown };
+
+  if (typeof url !== "string" || !url.trim()) {
+    throw new Error("Download request URL is required.");
+  }
+
+  return { url: url.trim() };
+}

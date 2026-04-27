@@ -4,6 +4,7 @@ app/downloader/bin/*
 AGENTS.md
 dist/
 build/
+media/
 *.log
 .DS_Store
 *.env

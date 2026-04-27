@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --isolatedModules --types node --outDir ../../dist/downloader scripts/install-tools.mts",
+    "build": "tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --isolatedModules --types node --outDir ../../dist/downloader install-tools.mts download.ts",
     "install:tools": "pnpm build && node ../../dist/downloader/install-tools.mjs"
   },
   "devDependencies": {

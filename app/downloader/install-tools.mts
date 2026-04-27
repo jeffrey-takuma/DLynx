@@ -15,31 +15,66 @@ type Tool = {
   outputName: string;
   url: string;
   archiveType: ArchiveType;
+  executableName: string;
 };
+
+type ToolSource = Omit<Tool, "name" | "outputName">;
 
 const repoRoot = getRepoRoot();
 const binDir = path.join(repoRoot, "app/downloader/bin");
 const force = process.argv.includes("--force");
 
-const tools: Tool[] = [
-  {
-    name: "yt-dlp",
-    outputName: process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp",
-    url: getYtDlpUrl(),
-    archiveType: "file",
+const ffmpegSources: Record<string, ToolSource> = {
+  "darwin-x64": {
+    url: "https://evermeet.cx/ffmpeg/getrelease/zip",
+    archiveType: "zip",
+    executableName: "ffmpeg",
   },
-  {
-    name: "ffmpeg",
-    outputName: process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg",
-    url: getFfmpegUrl(),
-    archiveType: process.platform === "win32" ? "zip" : "tar",
+  "darwin-arm64": {
+    url: "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip",
+    archiveType: "zip",
+    executableName: "ffmpeg",
   },
-];
+  "linux-x64": {
+    url: "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linux64-gpl.tar.xz",
+    archiveType: "tar",
+    executableName: "ffmpeg",
+  },
+  "linux-arm64": {
+    url: "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linuxarm64-gpl.tar.xz",
+    archiveType: "tar",
+    executableName: "ffmpeg",
+  },
+  "win32-x64": {
+    url: "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+    archiveType: "zip",
+    executableName: "ffmpeg.exe",
+  },
+  "win32-arm64": {
+    url: "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-winarm64-gpl.zip",
+    archiveType: "zip",
+    executableName: "ffmpeg.exe",
+  },
+};
+
+const tools: Tool[] = [getYtDlpTool(), getFfmpegTool()];
 
 await mkdir(binDir, { recursive: true });
 
 for (const tool of tools) {
   await installTool(tool);
+}
+
+function getYtDlpTool(): Tool {
+  const outputName = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+
+  return {
+    name: "yt-dlp",
+    outputName,
+    url: getYtDlpUrl(),
+    archiveType: "file",
+    executableName: outputName,
+  };
 }
 
 function getYtDlpUrl(): string {
@@ -60,22 +95,19 @@ function getYtDlpUrl(): string {
   throw new Error(`Unsupported platform for yt-dlp: ${process.platform}`);
 }
 
-function getFfmpegUrl(): string {
-  if (process.platform === "darwin") {
-    const target = arch() === "arm64" ? "macosarm64" : "macos64";
-    return `https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-${target}-gpl.tar.xz`;
+function getFfmpegTool(): Tool {
+  const key = `${process.platform}-${arch()}`;
+  const source = ffmpegSources[key];
+
+  if (!source) {
+    throw new Error(`Unsupported platform for bundled ffmpeg: ${key}`);
   }
 
-  if (process.platform === "linux") {
-    const target = arch() === "arm64" ? "linuxarm64" : "linux64";
-    return `https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-${target}-gpl.tar.xz`;
-  }
-
-  if (process.platform === "win32") {
-    return "https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip";
-  }
-
-  throw new Error(`Unsupported platform for bundled ffmpeg: ${process.platform}`);
+  return {
+    name: "ffmpeg",
+    outputName: process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg",
+    ...source,
+  };
 }
 
 async function installTool(tool: Tool): Promise<void> {
@@ -87,23 +119,38 @@ async function installTool(tool: Tool): Promise<void> {
     return;
   }
 
-  const tempPath = path.join(tmpdir(), `${tool.name}-${process.pid}-${Date.now()}`);
+  const tempPath = path.join(
+    tmpdir(),
+    `${tool.name}-${process.pid}-${Date.now()}`,
+  );
   const downloadPath = getDownloadPath(tempPath, tool.archiveType);
 
   console.log(`${tool.name}: downloading`);
   await download(tool.url, downloadPath);
 
   if (tool.archiveType === "tar") {
-    await extractExecutableFromArchive("tar", downloadPath, tool.outputName, outputPath);
+    await extractExecutableFromArchive(
+      "tar",
+      downloadPath,
+      tool.executableName,
+      outputPath,
+    );
   } else if (tool.archiveType === "zip") {
-    await extractExecutableFromArchive("zip", downloadPath, tool.outputName, outputPath);
+    await extractExecutableFromArchive(
+      "zip",
+      downloadPath,
+      tool.executableName,
+      outputPath,
+    );
   } else {
     await copyFile(downloadPath, outputPath);
   }
 
   await rm(downloadPath, { force: true });
   await chmodExecutable(outputPath);
-  console.log(`${tool.name}: installed to ${path.relative(repoRoot, outputPath)}`);
+  console.log(
+    `${tool.name}: installed to ${path.relative(repoRoot, outputPath)}`,
+  );
 }
 
 function getDownloadPath(tempPath: string, archiveType: ArchiveType): string {
@@ -129,49 +176,58 @@ async function download(
   }
 
   await new Promise<void>((resolve, reject) => {
-    const request = get(url, { headers: { "User-Agent": "yt-dlp-app-installer" } }, (response) => {
-      const location = response.headers.location;
+    const request = get(
+      url,
+      { headers: { "User-Agent": "yt-dlp-app-installer" } },
+      (response) => {
+        const location = response.headers.location;
 
-      if (
-        response.statusCode &&
-        response.statusCode >= 300 &&
-        response.statusCode < 400 &&
-        location
-      ) {
-        response.resume();
-        const nextUrl = new URL(location, url).toString();
-        download(nextUrl, destination, redirects + 1, attempts).then(resolve, reject);
-        return;
-      }
+        if (
+          response.statusCode &&
+          response.statusCode >= 300 &&
+          response.statusCode < 400 &&
+          location
+        ) {
+          response.resume();
+          const nextUrl = new URL(location, url).toString();
+          download(nextUrl, destination, redirects + 1, attempts).then(
+            resolve,
+            reject,
+          );
+          return;
+        }
 
-      if (response.statusCode && response.statusCode >= 500 && attempts < 2) {
-        response.resume();
-        delay(1000 * (attempts + 1))
-          .then(() => download(url, destination, redirects, attempts + 1))
-          .then(resolve, reject);
-        return;
-      }
+        if (response.statusCode && response.statusCode >= 500 && attempts < 2) {
+          response.resume();
+          delay(1000 * (attempts + 1))
+            .then(() => download(url, destination, redirects, attempts + 1))
+            .then(resolve, reject);
+          return;
+        }
 
-      if (response.statusCode !== 200) {
-        response.resume();
-        reject(new Error(`Download failed (${response.statusCode}) for ${url}`));
-        return;
-      }
+        if (response.statusCode !== 200) {
+          response.resume();
+          reject(
+            new Error(`Download failed (${response.statusCode}) for ${url}`),
+          );
+          return;
+        }
 
-      const file = createWriteStream(destination);
-      response.pipe(file);
-      file.on("finish", () => {
-        file.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
+        const file = createWriteStream(destination);
+        response.pipe(file);
+        file.on("finish", () => {
+          file.close((error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
 
-          resolve();
+            resolve();
+          });
         });
-      });
-      file.on("error", reject);
-    });
+        file.on("error", reject);
+      },
+    );
 
     request.on("error", reject);
   });
@@ -183,7 +239,10 @@ async function extractExecutableFromArchive(
   executableName: string,
   outputPath: string,
 ): Promise<void> {
-  const extractDir = path.join(tmpdir(), `extract-${path.basename(archivePath)}`);
+  const extractDir = path.join(
+    tmpdir(),
+    `extract-${path.basename(archivePath)}`,
+  );
 
   await rm(extractDir, { recursive: true, force: true });
   await mkdir(extractDir, { recursive: true });
@@ -207,7 +266,10 @@ async function extractExecutableFromArchive(
   }
 }
 
-async function findFile(directory: string, fileName: string): Promise<string | null> {
+async function findFile(
+  directory: string,
+  fileName: string,
+): Promise<string | null> {
   const entries = await readdir(directory, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -259,7 +321,10 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 function getRepoRoot(): string {
   const cwd = process.cwd();
 
-  if (path.basename(cwd) === "downloader" && path.basename(path.dirname(cwd)) === "app") {
+  if (
+    path.basename(cwd) === "downloader" &&
+    path.basename(path.dirname(cwd)) === "app"
+  ) {
     return path.resolve(cwd, "../..");
   }
 
