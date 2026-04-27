@@ -17,23 +17,34 @@ export type StartedDownload = {
   argv: string[];
 };
 
-type BuildYtDlpArgvOptions = {
-  url: string;
-  binDir: string;
+export type DownloadPlan = {
+  executablePath: string;
   outputDir: string;
+  argv: string[];
 };
 
-function buildYtDlpArgv(options: BuildYtDlpArgvOptions): string[] {
-  return [
-    "--ffmpeg-location",
-    options.binDir,
-    "--newline",
-    "--progress-template",
-    "download:%(progress._percent_str)s",
-    "-P",
-    options.outputDir,
-    options.url,
-  ];
+export function createDownloadPlan(
+  request: DownloadRequest,
+  repoRoot: string,
+): DownloadPlan {
+  const binDir = path.join(repoRoot, "app/downloader/bin");
+  const executableName = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+  const outputDir = path.join(repoRoot, "media");
+
+  return {
+    executablePath: path.join(binDir, executableName),
+    outputDir,
+    argv: [
+      "--ffmpeg-location",
+      binDir,
+      "--newline",
+      "--progress-template",
+      "download:%(progress._percent_str)s",
+      "-P",
+      outputDir,
+      request.url,
+    ],
+  };
 }
 
 export async function startDownload(
@@ -41,30 +52,15 @@ export async function startDownload(
   options: StartDownloadOptions = {},
 ): Promise<StartedDownload> {
   const repoRoot = options.repoRoot ?? process.cwd();
-  const binDir = path.join(repoRoot, "app/downloader/bin");
-  const outputDir = getManagedMediaDir(repoRoot);
+  const plan = createDownloadPlan(request, repoRoot);
 
-  await mkdir(outputDir, { recursive: true });
-
-  const argv = buildYtDlpArgv({
-    url: request.url,
-    binDir,
-    outputDir,
-  });
+  await mkdir(plan.outputDir, { recursive: true });
 
   return {
-    process: spawn(path.join(binDir, getYtDlpExecutableName()), argv, {
+    process: spawn(plan.executablePath, plan.argv, {
       stdio: ["ignore", "pipe", "pipe"],
     }),
-    outputDir,
-    argv,
+    outputDir: plan.outputDir,
+    argv: plan.argv,
   };
-}
-
-export function getManagedMediaDir(repoRoot: string): string {
-  return path.join(repoRoot, "media");
-}
-
-function getYtDlpExecutableName(): string {
-  return process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
 }
