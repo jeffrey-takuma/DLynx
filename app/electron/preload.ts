@@ -11,6 +11,7 @@ type DownloadProgressEvent = {
 
 type DownloadCompleteEvent = {
   filename?: string;
+  historyItem?: HistoryItem;
   id: number;
   url: string;
 };
@@ -20,9 +21,20 @@ type DownloadErrorEvent = {
   message: string;
 };
 
+type HistoryItem = {
+  _id: string;
+  title: string;
+  url: string;
+  filePath: string;
+  savedAt: string;
+};
+
 contextBridge.exposeInMainWorld("electronApp", {
   ping() {
     return ipcRenderer.invoke("app:ping");
+  },
+  getHistory() {
+    return ipcRenderer.invoke("history:list");
   },
   startDownload(request: DownloadRequest) {
     return ipcRenderer.invoke("download:start", request);

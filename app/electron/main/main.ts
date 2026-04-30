@@ -1,15 +1,21 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 
 import {
   type DownloadRequest,
   type StartedDownload,
   startDownload,
-} from "../downloader/download.js";
+} from "../../downloader/download.js";
+import type { SavedHistoryItem } from "../history-db.js";
+import { addHistoryItem, listHistoryItems } from "../history-db.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+app.setName("DLynx");
+
+const repoRoot = path.resolve(__dirname, "../..");
+const dockIconPath = path.resolve(
+  repoRoot,
+  "assets/AppIcon.iconset/icon_512x512@2x.png",
+);
 
 const activeDownloads = new Map<number, StartedDownload>();
 
@@ -40,14 +46,22 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.setIcon(dockIconPath);
+  }
+
   ipcMain.handle("app:ping", () => {
     return { ok: true, source: "electron-main" };
+  });
+
+  ipcMain.handle("history:list", () => {
+    return listHistoryItems();
   });
 
   ipcMain.handle("download:start", async (event, request: unknown) => {
     const downloadRequest = parseDownloadRequest(request);
     const started = await startDownload(downloadRequest, {
-      repoRoot: path.resolve(__dirname, "../.."),
+      repoRoot,
     });
     const downloadId = Date.now();
     let stdoutBuffer = "";
@@ -112,21 +126,39 @@ app.whenReady().then(() => {
     });
 
     started.process.on("close", (code) => {
-      activeDownloads.delete(downloadId);
+      void (async () => {
+        activeDownloads.delete(downloadId);
 
-      if (code === 0) {
-        event.sender.send("download:complete", {
+        if (code === 0) {
+          let historyItem: SavedHistoryItem | undefined;
+
+          if (destinationFilename) {
+            try {
+              historyItem = await addHistoryItem({
+                title: destinationFilename,
+                url: downloadRequest.url,
+                filePath: path.resolve(started.outputDir, destinationFilename),
+                savedAt: new Date().toISOString(),
+              });
+            } catch (error) {
+              console.error("Failed to save download history:", error);
+            }
+          }
+
+          event.sender.send("download:complete", {
+            id: downloadId,
+            filename: destinationFilename,
+            historyItem,
+            url: downloadRequest.url,
+          });
+          return;
+        }
+
+        event.sender.send("download:error", {
           id: downloadId,
-          filename: destinationFilename,
-          url: downloadRequest.url,
+          message: `yt-dlp exited with code ${code ?? "unknown"}.`,
         });
-        return;
-      }
-
-      event.sender.send("download:error", {
-        id: downloadId,
-        message: `yt-dlp exited with code ${code ?? "unknown"}.`,
-      });
+      })();
     });
 
     return {

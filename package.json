@@ -1,6 +1,7 @@
 {
   "name": "dlynx",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.16.0",
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:renderer\" \"pnpm dev:electron:wait\"",

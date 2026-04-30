@@ -22,9 +22,10 @@ type CurrentDownload = {
 };
 
 type HistoryItem = {
-  id: number;
+  _id: string;
   title: string;
   url: string;
+  filePath: string;
   savedAt: string;
 };
 
@@ -57,7 +58,24 @@ export default function App() {
     !url.trim() || isStarting || isDownloadLocked || isDownloadActive;
 
   useEffect(() => {
+    let isMounted = true;
     let resetTimer: number | undefined;
+
+    window.electronApp
+      .getHistory()
+      .then((items) => {
+        if (isMounted) {
+          setHistoryItems(items);
+        }
+      })
+      .catch((error) => {
+        if (isMounted) {
+          setErrorMessage(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      });
+
     const removeProgress = window.electronApp.onDownloadProgress((event) => {
       setCurrentDownload((download) => {
         if (download.id !== event.id) {
@@ -89,17 +107,18 @@ export default function App() {
           title: "Download complete",
         };
       });
-      setHistoryItems((items) =>
-        [
-          {
-            id: event.id,
-            title: event.filename ?? event.url,
-            url: event.url,
-            savedAt: formatSavedAt(new Date()),
-          },
-          ...items,
-        ].slice(0, 10),
-      );
+
+      const { historyItem } = event;
+
+      if (historyItem) {
+        setHistoryItems((items) =>
+          [
+            historyItem,
+            ...items.filter((item) => item._id !== historyItem._id),
+          ].slice(0, 50),
+        );
+      }
+
       resetTimer = window.setTimeout(() => {
         setCurrentDownload(emptyDownload);
       }, 1200);
@@ -121,6 +140,7 @@ export default function App() {
     });
 
     return () => {
+      isMounted = false;
       removeProgress();
       removeComplete();
       removeError();
@@ -348,12 +368,14 @@ export default function App() {
               </thead>
               <tbody>
                 {historyItems.map((item) => (
-                  <tr key={item.id}>
+                  <tr key={item._id}>
                     <td className="history-title-column">
                       <div className="history-title">{item.title}</div>
                       <div className="history-url">{item.url}</div>
                     </td>
-                    <td className="history-saved">{item.savedAt}</td>
+                    <td className="history-saved">
+                      {formatHistorySavedAt(item.savedAt)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -365,7 +387,13 @@ export default function App() {
   );
 }
 
-function formatSavedAt(date: Date): string {
+function formatHistorySavedAt(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
