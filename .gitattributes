@@ -31,3 +31,9 @@
 *.zip binary
 *.woff binary
 *.woff2 binary
+
+*.mts text eol=lf
+*.css text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.jsx text eol=lf
