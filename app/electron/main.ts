@@ -44,25 +44,89 @@ app.whenReady().then(() => {
     return { ok: true, source: "electron-main" };
   });
 
-  ipcMain.handle("download:start", async (_event, request: unknown) => {
+  ipcMain.handle("download:start", async (event, request: unknown) => {
     const downloadRequest = parseDownloadRequest(request);
     const started = await startDownload(downloadRequest, {
       repoRoot: path.resolve(__dirname, "../.."),
     });
     const downloadId = Date.now();
+    let stdoutBuffer = "";
+    let stderrBuffer = "";
+    let destinationFilename: string | undefined;
 
     activeDownloads.set(downloadId, started);
 
+    function handleProcessOutput(source: "stderr" | "stdout", chunk: Buffer) {
+      const text = chunk.toString();
+      const nextBuffer = source === "stdout" ? stdoutBuffer : stderrBuffer;
+      const parts = `${nextBuffer}${text}`.split(/\r|\n/);
+      const rest = parts.pop() ?? "";
+
+      if (source === "stdout") {
+        stdoutBuffer = rest;
+      } else {
+        stderrBuffer = rest;
+      }
+
+      for (const line of parts) {
+        if (!line.trim()) {
+          continue;
+        }
+
+        if (source === "stdout") {
+          console.log(`yt-dlp stdout: ${line}`);
+        } else {
+          console.error(`yt-dlp stderr: ${line}`);
+        }
+
+        const percent = parseDownloadPercent(line);
+        const parsedFilename = parseOutputFilename(line);
+
+        if (parsedFilename) {
+          destinationFilename = parsedFilename;
+        }
+
+        if (percent !== null) {
+          event.sender.send("download:progress", {
+            id: downloadId,
+            percent,
+          });
+        }
+      }
+    }
+
     started.process.stdout.on("data", (chunk: Buffer) => {
-      console.log(`yt-dlp stdout: ${chunk.toString()}`);
+      handleProcessOutput("stdout", chunk);
     });
 
     started.process.stderr.on("data", (chunk: Buffer) => {
-      console.error(`yt-dlp stderr: ${chunk.toString()}`);
+      handleProcessOutput("stderr", chunk);
     });
 
-    started.process.on("close", () => {
+    started.process.on("error", (error) => {
       activeDownloads.delete(downloadId);
+      event.sender.send("download:error", {
+        id: downloadId,
+        message: error.message,
+      });
+    });
+
+    started.process.on("close", (code) => {
+      activeDownloads.delete(downloadId);
+
+      if (code === 0) {
+        event.sender.send("download:complete", {
+          id: downloadId,
+          filename: destinationFilename,
+          url: downloadRequest.url,
+        });
+        return;
+      }
+
+      event.sender.send("download:error", {
+        id: downloadId,
+        message: `yt-dlp exited with code ${code ?? "unknown"}.`,
+      });
     });
 
     return {
@@ -99,4 +163,30 @@ function parseDownloadRequest(value: unknown): DownloadRequest {
   }
 
   return { url: url.trim() };
+}
+
+function parseDownloadPercent(line: string): number | null {
+  const match = line.match(/(?:download:)?\s*([0-9]+(?:\.[0-9]+)?)%/);
+
+  if (!match) {
+    return null;
+  }
+
+  return Math.min(Number(match[1]), 100);
+}
+
+function parseOutputFilename(line: string): string | undefined {
+  const mergerMatch = line.match(/\[Merger\]\s+Merging formats into "(.+)"$/);
+
+  if (mergerMatch) {
+    return path.basename(mergerMatch[1]);
+  }
+
+  const destinationPrefix = "[download] Destination:";
+
+  if (line.startsWith(destinationPrefix)) {
+    return path.basename(line.slice(destinationPrefix.length).trim());
+  }
+
+  return undefined;
 }

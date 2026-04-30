@@ -39,7 +39,7 @@ export function createDownloadPlan(
       binDir,
       "--newline",
       "--progress-template",
-      "download:%(progress._percent_str)s",
+      "download:download:%(progress._percent_str)s",
       "-P",
       outputDir,
       request.url,

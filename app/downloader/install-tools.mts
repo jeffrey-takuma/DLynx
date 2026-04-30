@@ -178,7 +178,7 @@ async function download(
   await new Promise<void>((resolve, reject) => {
     const request = get(
       url,
-      { headers: { "User-Agent": "yt-dlp-app-installer" } },
+      { headers: { "User-Agent": "dlynx-installer" } },
       (response) => {
         const location = response.headers.location;
 

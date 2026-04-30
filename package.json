@@ -1,5 +1,5 @@
 {
-  "name": "yt-dlp-app",
+  "name": "dlynx",
   "private": true,
   "packageManager": "pnpm@10.16.0",
   "scripts": {
