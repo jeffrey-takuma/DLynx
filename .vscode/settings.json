@@ -1,0 +1,4 @@
+{
+  "python.defaultInterpreterPath": "app/downloader/.venv/bin/python",
+  "python.analysis.extraPaths": ["app/downloader/src"]
+}

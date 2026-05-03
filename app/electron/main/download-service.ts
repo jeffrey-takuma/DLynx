@@ -20,6 +20,7 @@ type StartedDownload = {
 type DownloadPlan = {
   executablePath: string;
   outputDir: string;
+  cwd: string;
   argv: string[];
 };
 
@@ -62,9 +63,9 @@ export function registerDownloadHandlers({
         }
 
         if (source === "stdout") {
-          console.log(`yt-dlp stdout: ${line}`);
+          console.log(`downloader stdout: ${line}`);
         } else {
-          console.error(`yt-dlp stderr: ${line}`);
+          console.error(`downloader stderr: ${line}`);
         }
 
         const percent = parseDownloadPercent(line);
@@ -122,23 +123,17 @@ function createDownloadPlan(
   request: DownloadRequest,
   repoRoot: string,
 ): DownloadPlan {
-  const binDir = path.join(repoRoot, "app/downloader/bin");
-  const executableName = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+  const downloaderDir = path.join(repoRoot, "app/downloader");
+  const binDir = path.join(downloaderDir, "bin");
+  const executableName =
+    process.platform === "win32" ? "dlynx-downloader.exe" : "dlynx-downloader";
   const outputDir = path.join(repoRoot, "media");
 
   return {
-    executablePath: path.join(binDir, executableName),
+    executablePath: path.join(downloaderDir, "dist", executableName),
     outputDir,
-    argv: [
-      "--ffmpeg-location",
-      binDir,
-      "--newline",
-      "--progress-template",
-      "download:download:%(progress._percent_str)s",
-      "-P",
-      outputDir,
-      request.url,
-    ],
+    cwd: downloaderDir,
+    argv: [request.url, "--output-dir", outputDir, "--ffmpeg-location", binDir],
   };
 }
 
@@ -152,6 +147,7 @@ async function startDownload(
 
   return {
     process: spawn(plan.executablePath, plan.argv, {
+      cwd: plan.cwd,
       stdio: ["ignore", "pipe", "pipe"],
     }),
     outputDir: plan.outputDir,
@@ -203,7 +199,7 @@ async function handleDownloadClose({
 
   sender.send("download:error", {
     id: downloadId,
-    message: `yt-dlp exited with code ${code ?? "unknown"}.`,
+    message: `downloader exited with code ${code ?? "unknown"}.`,
   });
 }
 
