@@ -1,4 +1,4 @@
-.PHONY: sync lint format typecheck run build clean check
+.PHONY: sync lint format typecheck run build clean check test
 
 sync:
 	uv sync
@@ -18,9 +18,12 @@ run:
 	uv run python src/yt_dlp_api.py
 
 build:
-	uv run pyinstaller --onefile --name dlynx-downloader src/yt_dlp_api.py
+	uv run pyinstaller --onedir --name dlynx-downloader src/yt_dlp_api.py
 
 clean:
 	rm -rf .pytest_cache .ruff_cache src/__pycache__ ../../.ruff_cache build dist *.spec
 
 check: lint typecheck
+
+test:
+	uv run pytest

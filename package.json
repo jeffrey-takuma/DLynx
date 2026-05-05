@@ -12,7 +12,7 @@
     "install:ffmpeg": "node scripts/install-ffmpeg.mjs",
     "db:clear": "node scripts/clear-history.mjs",
     "start": "pnpm build && pnpm --filter ./app/electron start",
-    "test": "vitest",
+    "test": "vitest && make -C app/downloader test",
     "format": "biome check --write . && make -C app/downloader format",
     "lint": "biome check . && pnpm lint:downloader",
     "lint:downloader": "make -C app/downloader check",

@@ -27,9 +27,14 @@ include = ["src"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["test"]
+
 [dependency-groups]
 dev = [
     "pyinstaller>=6.20.0",
     "pyright>=1.1.409",
+    "pytest>=9.0.3",
     "ruff>=0.15.12",
 ]

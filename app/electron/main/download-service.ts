@@ -69,10 +69,18 @@ export function registerDownloadHandlers({
         }
 
         const percent = parseDownloadPercent(line);
+        const phaseProgress = parseDownloadPhase(line);
         const parsedFilename = parseOutputFilename(line);
 
         if (parsedFilename) {
           destinationFilename = parsedFilename;
+        }
+
+        if (phaseProgress) {
+          event.sender.send("download:progress", {
+            id: downloadId,
+            ...phaseProgress,
+          });
         }
 
         if (percent !== null) {
@@ -130,7 +138,12 @@ function createDownloadPlan(
   const outputDir = path.join(repoRoot, "media");
 
   return {
-    executablePath: path.join(downloaderDir, "dist", executableName),
+    executablePath: path.join(
+      downloaderDir,
+      "dist",
+      "dlynx-downloader",
+      executableName,
+    ),
     outputDir,
     cwd: downloaderDir,
     argv: [request.url, "--output-dir", outputDir, "--ffmpeg-location", binDir],
@@ -225,6 +238,53 @@ function parseDownloadPercent(line: string): number | null {
   }
 
   return Math.min(Number(match[1]), 100);
+}
+
+function parseDownloadPhase(
+  line: string,
+): { progress: number; status: string; title: string } | undefined {
+  const normalized = line.toLowerCase();
+
+  if (
+    normalized.includes("[merger]") ||
+    normalized.includes("merging formats") ||
+    normalized.includes("post-process")
+  ) {
+    return {
+      progress: 99,
+      status: "Merging and finishing",
+      title: "Finalizing download",
+    };
+  }
+
+  if (
+    normalized.includes("[info]") ||
+    normalized.includes("format") ||
+    normalized.includes("[download] destination:")
+  ) {
+    return {
+      progress: 15,
+      status: "Selecting format and preparing FFmpeg",
+      title: "Preparing media",
+    };
+  }
+
+  if (
+    normalized.includes("extracting") ||
+    normalized.includes("downloading webpage") ||
+    normalized.includes("downloading api json") ||
+    normalized.includes("downloading player") ||
+    normalized.includes("downloading ios player api json") ||
+    normalized.includes("downloading android player api json")
+  ) {
+    return {
+      progress: 10,
+      status: "Fetching metadata",
+      title: "Analyzing URL",
+    };
+  }
+
+  return undefined;
 }
 
 function parseOutputFilename(line: string): string | undefined {

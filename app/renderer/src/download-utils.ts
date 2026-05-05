@@ -38,15 +38,10 @@ export function mapDownloadProgress(
   snapshot: ProgressSnapshot,
   rawPercent: number,
 ): MappedProgress {
-  const nextPhase =
-    rawPercent < snapshot.rawProgress - 20
-      ? Math.min(snapshot.phase + 1, 1)
-      : snapshot.phase;
-  const phaseOffset = nextPhase * 50;
-  const mappedProgress = phaseOffset + rawPercent * 0.5;
+  const mappedProgress = 16 + rawPercent * 0.82;
 
   return {
-    phase: nextPhase,
+    phase: snapshot.phase,
     rawProgress: rawPercent,
     progress: Math.min(Math.round(mappedProgress), 99),
   };

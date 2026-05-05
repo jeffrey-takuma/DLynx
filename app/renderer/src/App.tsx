@@ -1,5 +1,5 @@
 import { LoaderCircle, Menu, X } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type SyntheticEvent, useEffect, useState } from "react";
 
 import {
   createDownloadRequest,
@@ -82,6 +82,20 @@ export default function App() {
           return download;
         }
 
+        if (typeof event.progress === "number") {
+          return {
+            ...download,
+            progress: Math.max(download.progress, event.progress),
+            state: "downloading",
+            status: event.status ?? download.status,
+            title: event.title ?? download.title,
+          };
+        }
+
+        if (typeof event.percent !== "number") {
+          return download;
+        }
+
         return {
           ...download,
           ...mapDownloadProgress(download, event.percent),
@@ -148,7 +162,7 @@ export default function App() {
     };
   }, []);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (isDownloadDisabled) {
@@ -168,9 +182,9 @@ export default function App() {
         id: null,
         phase: 0,
         rawProgress: 0,
-        title: "Preparing yt-dlp",
-        status: "Starting local process",
-        progress: 0,
+        title: "Starting process",
+        status: "Launching yt-dlp",
+        progress: 1,
         state: "preparing",
         url: request.url,
       });

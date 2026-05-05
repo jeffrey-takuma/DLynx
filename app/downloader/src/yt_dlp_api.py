@@ -8,30 +8,7 @@ from typing import Any, cast
 from yt_dlp import YoutubeDL
 
 
-def main() -> int:
-    args = parse_args()
-    output_dir = args.output_dir.resolve()
-    ffmpeg_location = args.ffmpeg_location.resolve()
-
-    try:
-        validate_ffmpeg_location(ffmpeg_location)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        options: dict[str, Any] = {
-            "ffmpeg_location": str(ffmpeg_location),
-            "paths": {"home": str(output_dir)},
-            "progress_hooks": [emit_progress],
-        }
-
-        with YoutubeDL(cast(Any, options)) as ydl:
-            ydl.download([args.url])
-    except Exception as error:
-        print(str(error), file=sys.stderr, flush=True)
-        return 1
-
-    return 0
-
-
+# 入力: downloader の起動引数を読み取り、ffmpeg location の配置を確認する
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Download media through the yt-dlp Python API.",
@@ -55,7 +32,40 @@ def validate_ffmpeg_location(ffmpeg_location: Path) -> None:
         raise ValueError(msg)
 
 
-def emit_progress(event: dict[str, Any]) -> None:
+def create_ytdlp_options(
+    output_dir: Path,
+    ffmpeg_location: Path,
+) -> dict[str, Any]:
+    return {
+        "ffmpeg_location": str(ffmpeg_location),
+        "paths": {"home": str(output_dir)},
+        "progress_hooks": [handle_progress_hook],
+    }
+
+
+# 接続: 入力を yt-dlp の API 呼び出しに変換する
+def main() -> int:
+    args = parse_args()
+    output_dir = args.output_dir.resolve()
+    ffmpeg_location = args.ffmpeg_location.resolve()
+
+    try:
+        validate_ffmpeg_location(ffmpeg_location)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        options = create_ytdlp_options(output_dir, ffmpeg_location)
+
+        with YoutubeDL(cast(Any, options)) as ydl:
+            ydl.download([args.url])
+    except Exception as error:
+        print(str(error), file=sys.stderr, flush=True)
+        return 1
+
+    return 0
+
+
+# 出力: yt-dlp の progress hook を処理し、DLynx 用の進捗ログを出す
+def handle_progress_hook(event: dict[str, Any]) -> None:
     status = event.get("status")
 
     if status == "downloading":
@@ -67,7 +77,13 @@ def emit_progress(event: dict[str, Any]) -> None:
     filename = event.get("filename")
 
     if status == "finished" and isinstance(filename, str):
-        print(f"[download] Destination: {Path(filename).name}", flush=True)
+        normalized_filename = filename.strip()
+
+        if normalized_filename:
+            print(
+                f"[download] Destination: {Path(normalized_filename).name}",
+                flush=True,
+            )
 
 
 def get_percent(event: dict[str, Any]) -> float | None:
