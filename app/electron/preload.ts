@@ -6,7 +6,10 @@ type DownloadRequest = {
 
 type DownloadProgressEvent = {
   id: number;
-  percent: number;
+  percent?: number;
+  progress?: number;
+  status?: string;
+  title?: string;
 };
 
 type DownloadCompleteEvent = {

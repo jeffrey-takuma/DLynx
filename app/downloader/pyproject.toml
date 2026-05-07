@@ -1,0 +1,40 @@
+[project]
+name = "dlynx-yt-dlp"
+version = "0.1.0"
+description = "yt-dlp API bridge for DLynx"
+requires-python = ">=3.12"
+dependencies = [
+    "yt-dlp>=2026.3.17",
+]
+
+[tool.ruff]
+line-length = 88
+src = ["src"]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "B",
+    "E",
+    "F",
+    "I",
+    "SIM",
+    "UP",
+]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["test"]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.20.0",
+    "pyright>=1.1.409",
+    "pytest>=9.0.3",
+    "ruff>=0.15.12",
+]

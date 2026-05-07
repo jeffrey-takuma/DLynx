@@ -8,56 +8,44 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-type ArchiveType = "file" | "tar" | "zip";
-
-type Tool = {
-  name: string;
-  outputName: string;
-  url: string;
-  archiveType: ArchiveType;
-  executableName: string;
-};
-
-type ToolSource = Omit<Tool, "name" | "outputName">;
-
 const repoRoot = getRepoRoot();
 const binDir = path.join(repoRoot, "app/downloader/bin");
 const force = process.argv.includes("--force");
 
-const ffmpegSources: Record<string, ToolSource> = {
+const ffmpegSources = {
   "darwin-x64": {
-    url: "https://evermeet.cx/ffmpeg/getrelease/zip",
+    url: "https://github.com/jeffrey-takuma/DLynx/releases/download/ffmpeg-tools-v1/ffmpeg-darwin-x64.zip",
     archiveType: "zip",
     executableName: "ffmpeg",
   },
   "darwin-arm64": {
-    url: "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip",
+    url: "https://github.com/jeffrey-takuma/DLynx/releases/download/ffmpeg-tools-v1/ffmpeg-darwin-arm64.zip",
     archiveType: "zip",
     executableName: "ffmpeg",
   },
   "linux-x64": {
-    url: "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linux64-gpl.tar.xz",
+    url: "https://github.com/jeffrey-takuma/DLynx/releases/download/ffmpeg-tools-v1/ffmpeg-linux-x64.tar.xz",
     archiveType: "tar",
     executableName: "ffmpeg",
   },
   "linux-arm64": {
-    url: "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-linuxarm64-gpl.tar.xz",
+    url: "https://github.com/jeffrey-takuma/DLynx/releases/download/ffmpeg-tools-v1/ffmpeg-linux-arm64.tar.xz",
     archiveType: "tar",
     executableName: "ffmpeg",
   },
   "win32-x64": {
-    url: "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+    url: "https://github.com/jeffrey-takuma/DLynx/releases/download/ffmpeg-tools-v1/ffmpeg-win32-x64.zip",
     archiveType: "zip",
     executableName: "ffmpeg.exe",
   },
   "win32-arm64": {
-    url: "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-winarm64-gpl.zip",
+    url: "https://github.com/jeffrey-takuma/DLynx/releases/download/ffmpeg-tools-v1/ffmpeg-win32-arm64.zip",
     archiveType: "zip",
     executableName: "ffmpeg.exe",
   },
 };
 
-const tools: Tool[] = [getYtDlpTool(), getFfmpegTool()];
+const tools = [getFfmpegTool()];
 
 await mkdir(binDir, { recursive: true });
 
@@ -65,37 +53,7 @@ for (const tool of tools) {
   await installTool(tool);
 }
 
-function getYtDlpTool(): Tool {
-  const outputName = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
-
-  return {
-    name: "yt-dlp",
-    outputName,
-    url: getYtDlpUrl(),
-    archiveType: "file",
-    executableName: outputName,
-  };
-}
-
-function getYtDlpUrl(): string {
-  if (process.platform === "darwin") {
-    return "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos";
-  }
-
-  if (process.platform === "linux") {
-    return arch() === "arm64"
-      ? "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64"
-      : "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux";
-  }
-
-  if (process.platform === "win32") {
-    return "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
-  }
-
-  throw new Error(`Unsupported platform for yt-dlp: ${process.platform}`);
-}
-
-function getFfmpegTool(): Tool {
+function getFfmpegTool() {
   const key = `${process.platform}-${arch()}`;
   const source = ffmpegSources[key];
 
@@ -110,7 +68,7 @@ function getFfmpegTool(): Tool {
   };
 }
 
-async function installTool(tool: Tool): Promise<void> {
+async function installTool(tool) {
   const outputPath = path.join(binDir, tool.outputName);
 
   if (!force && (await exists(outputPath))) {
@@ -142,8 +100,6 @@ async function installTool(tool: Tool): Promise<void> {
       tool.executableName,
       outputPath,
     );
-  } else {
-    await copyFile(downloadPath, outputPath);
   }
 
   await rm(downloadPath, { force: true });
@@ -153,29 +109,20 @@ async function installTool(tool: Tool): Promise<void> {
   );
 }
 
-function getDownloadPath(tempPath: string, archiveType: ArchiveType): string {
+function getDownloadPath(tempPath, archiveType) {
   if (archiveType === "tar") {
     return `${tempPath}.tar.xz`;
   }
 
-  if (archiveType === "zip") {
-    return `${tempPath}.zip`;
-  }
-
-  return tempPath;
+  return `${tempPath}.zip`;
 }
 
-async function download(
-  url: string,
-  destination: string,
-  redirects = 0,
-  attempts = 0,
-): Promise<void> {
+async function download(url, destination, redirects = 0, attempts = 0) {
   if (redirects > 5) {
     throw new Error(`Too many redirects while downloading ${url}`);
   }
 
-  await new Promise<void>((resolve, reject) => {
+  await new Promise((resolve, reject) => {
     const request = get(
       url,
       { headers: { "User-Agent": "dlynx-installer" } },
@@ -234,11 +181,11 @@ async function download(
 }
 
 async function extractExecutableFromArchive(
-  archiveType: Exclude<ArchiveType, "file">,
-  archivePath: string,
-  executableName: string,
-  outputPath: string,
-): Promise<void> {
+  archiveType,
+  archivePath,
+  executableName,
+  outputPath,
+) {
   const extractDir = path.join(
     tmpdir(),
     `extract-${path.basename(archivePath)}`,
@@ -266,10 +213,7 @@ async function extractExecutableFromArchive(
   }
 }
 
-async function findFile(
-  directory: string,
-  fileName: string,
-): Promise<string | null> {
+async function findFile(directory, fileName) {
   const entries = await readdir(directory, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -291,13 +235,13 @@ async function findFile(
   return null;
 }
 
-async function chmodExecutable(filePath: string): Promise<void> {
+async function chmodExecutable(filePath) {
   if (process.platform !== "win32") {
     await chmod(filePath, 0o755);
   }
 }
 
-async function exists(filePath: string): Promise<boolean> {
+async function exists(filePath) {
   try {
     await stat(filePath);
     return true;
@@ -310,15 +254,13 @@ async function exists(filePath: string): Promise<boolean> {
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function getRepoRoot(): string {
+function getRepoRoot() {
   const cwd = process.cwd();
 
   if (
@@ -329,4 +271,8 @@ function getRepoRoot(): string {
   }
 
   return cwd;
+}
+
+function isNodeError(error) {
+  return error instanceof Error && "code" in error;
 }
