@@ -1,7 +1,7 @@
 import path from "node:path";
 import { app, BrowserWindow, ipcMain } from "electron";
 
-import { registerDownloadHandlers } from "./download-service.js";
+import { startDownloadSession } from "./download-service.js";
 import { listHistoryItems } from "./history-db.js";
 
 app.setName("DLynx");
@@ -51,7 +51,13 @@ app.whenReady().then(() => {
     return listHistoryItems();
   });
 
-  registerDownloadHandlers({ repoRoot });
+  ipcMain.handle("download:start", (event, request: unknown) => {
+    return startDownloadSession({
+      repoRoot,
+      request,
+      sender: event.sender,
+    });
+  });
 
   createWindow();
 

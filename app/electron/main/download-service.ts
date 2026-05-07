@@ -2,7 +2,7 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { Readable } from "node:stream";
-import { ipcMain, type WebContents } from "electron";
+import type { WebContents } from "electron";
 
 import type { SavedHistoryItem } from "./history-db.js";
 import { addHistoryItem } from "./history-db.js";
@@ -30,104 +30,107 @@ type RegisterDownloadHandlersOptions = {
 
 const activeDownloads = new Map<number, StartedDownload>();
 
-export function registerDownloadHandlers({
+export async function startDownloadSession({
   repoRoot,
-}: RegisterDownloadHandlersOptions): void {
-  ipcMain.handle("download:start", async (event, request: unknown) => {
-    const downloadRequest = parseDownloadRequest(request);
-    const started = await startDownload(downloadRequest, {
-      repoRoot,
-    });
-    const downloadId = Date.now();
-    let stdoutBuffer = "";
-    let stderrBuffer = "";
-    let destinationFilename: string | undefined;
+  request,
+  sender,
+}: RegisterDownloadHandlersOptions & {
+  request: unknown;
+  sender: WebContents;
+}): Promise<{ id: number; pid: number | undefined; outputDir: string }> {
+  const downloadRequest = parseDownloadRequest(request);
+  const started = await executeDownload(downloadRequest, {
+    repoRoot,
+  });
+  const downloadId = Date.now();
+  let stdoutBuffer = "";
+  let stderrBuffer = "";
+  let destinationFilename: string | undefined;
 
-    activeDownloads.set(downloadId, started);
+  activeDownloads.set(downloadId, started);
 
-    function handleProcessOutput(source: "stderr" | "stdout", chunk: Buffer) {
-      const text = chunk.toString();
-      const nextBuffer = source === "stdout" ? stdoutBuffer : stderrBuffer;
-      const parts = `${nextBuffer}${text}`.split(/\r|\n/);
-      const rest = parts.pop() ?? "";
+  function handleProcessOutput(source: "stderr" | "stdout", chunk: Buffer) {
+    const text = chunk.toString();
+    const nextBuffer = source === "stdout" ? stdoutBuffer : stderrBuffer;
+    const parts = `${nextBuffer}${text}`.split(/\r|\n/);
+    const rest = parts.pop() ?? "";
 
-      if (source === "stdout") {
-        stdoutBuffer = rest;
-      } else {
-        stderrBuffer = rest;
-      }
-
-      for (const line of parts) {
-        if (!line.trim()) {
-          continue;
-        }
-
-        if (source === "stdout") {
-          console.log(`downloader stdout: ${line}`);
-        } else {
-          console.error(`downloader stderr: ${line}`);
-        }
-
-        const percent = parseDownloadPercent(line);
-        const phaseProgress = parseDownloadPhase(line);
-        const parsedFilename = parseOutputFilename(line);
-
-        if (parsedFilename) {
-          destinationFilename = parsedFilename;
-        }
-
-        if (phaseProgress) {
-          event.sender.send("download:progress", {
-            id: downloadId,
-            ...phaseProgress,
-          });
-        }
-
-        if (percent !== null) {
-          event.sender.send("download:progress", {
-            id: downloadId,
-            percent,
-          });
-        }
-      }
+    if (source === "stdout") {
+      stdoutBuffer = rest;
+    } else {
+      stderrBuffer = rest;
     }
 
-    started.process.stdout.on("data", (chunk: Buffer) => {
-      handleProcessOutput("stdout", chunk);
-    });
+    for (const line of parts) {
+      if (!line.trim()) {
+        continue;
+      }
 
-    started.process.stderr.on("data", (chunk: Buffer) => {
-      handleProcessOutput("stderr", chunk);
-    });
+      if (source === "stdout") {
+        console.log(`downloader stdout: ${line}`);
+      } else {
+        console.error(`downloader stderr: ${line}`);
+      }
 
-    started.process.on("error", (error) => {
-      activeDownloads.delete(downloadId);
-      event.sender.send("download:error", {
-        id: downloadId,
-        message: error.message,
-      });
-    });
+      const percent = readPercent(line);
+      const phaseProgress = readPhase(line);
+      const parsedFilename = readFilename(line);
 
-    started.process.on("close", (code) => {
-      void handleDownloadClose({
-        code,
-        downloadId,
-        downloadRequest,
-        sender: event.sender,
-        started,
-        destinationFilename,
-      });
-    });
+      if (parsedFilename) {
+        destinationFilename = parsedFilename;
+      }
 
-    return {
-      id: downloadId,
-      pid: started.process.pid,
-      outputDir: started.outputDir,
-    };
+      if (phaseProgress) {
+        sender.send("download:progress", {
+          id: downloadId,
+          ...phaseProgress,
+        });
+      }
+
+      if (percent !== null) {
+        sender.send("download:progress", {
+          id: downloadId,
+          percent,
+        });
+      }
+    }
+  }
+
+  started.process.stdout.on("data", (chunk: Buffer) => {
+    handleProcessOutput("stdout", chunk);
   });
+
+  started.process.stderr.on("data", (chunk: Buffer) => {
+    handleProcessOutput("stderr", chunk);
+  });
+
+  started.process.on("error", (error) => {
+    activeDownloads.delete(downloadId);
+    sender.send("download:error", {
+      id: downloadId,
+      message: error.message,
+    });
+  });
+
+  started.process.on("close", (code) => {
+    void cleanUpDownload({
+      code,
+      downloadId,
+      downloadRequest,
+      sender,
+      started,
+      destinationFilename,
+    });
+  });
+
+  return {
+    id: downloadId,
+    pid: started.process.pid,
+    outputDir: started.outputDir,
+  };
 }
 
-function createDownloadPlan(
+export function createDownloadPlan(
   request: DownloadRequest,
   repoRoot: string,
 ): DownloadPlan {
@@ -150,7 +153,7 @@ function createDownloadPlan(
   };
 }
 
-async function startDownload(
+async function executeDownload(
   request: DownloadRequest,
   options: { repoRoot: string },
 ): Promise<StartedDownload> {
@@ -168,7 +171,7 @@ async function startDownload(
   };
 }
 
-async function handleDownloadClose({
+async function cleanUpDownload({
   code,
   downloadId,
   downloadRequest,
@@ -230,7 +233,7 @@ function parseDownloadRequest(value: unknown): DownloadRequest {
   return { url: url.trim() };
 }
 
-function parseDownloadPercent(line: string): number | null {
+function readPercent(line: string): number | null {
   const match = line.match(/(?:download:)?\s*([0-9]+(?:\.[0-9]+)?)%/);
 
   if (!match) {
@@ -240,7 +243,7 @@ function parseDownloadPercent(line: string): number | null {
   return Math.min(Number(match[1]), 100);
 }
 
-function parseDownloadPhase(
+function readPhase(
   line: string,
 ): { progress: number; status: string; title: string } | undefined {
   const normalized = line.toLowerCase();
@@ -287,7 +290,7 @@ function parseDownloadPhase(
   return undefined;
 }
 
-function parseOutputFilename(line: string): string | undefined {
+function readFilename(line: string): string | undefined {
   const mergerMatch = line.match(/\[Merger\]\s+Merging formats into "(.+)"$/);
 
   if (mergerMatch) {
